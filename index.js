@@ -141,7 +141,7 @@ async function execute(message, serverQueue){
         volume: volume,
         playing: true
     }
-    // Adding contract to queue
+    // Adding contract to queue 
     queue.set(message.guild.id, queueContract);
     // Pushing song object into songs array
     queueContract.songs.push(song);
