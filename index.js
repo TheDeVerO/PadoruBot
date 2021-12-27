@@ -204,7 +204,7 @@ async function execute(message, serverQueue) {
         changeStatus('dnd');
         // If everything went right - informing user about successfull operation
         console.log(`Added ${song.title} to queue`);
-        return message.channel.send(`**${song.title}** has been added to the queue!`);
+        return message.channel.send(`**${song.title}** has been added to the queue.`);
     }
 
 
@@ -268,6 +268,7 @@ function skip(message, serverQueue) {
     if (!message.member.voice.channel) return message.channel.send('You have to be in a voice channel.');
     if (!serverQueue) return message.channel.send('No song to skip.');
 
+    message.channel.send('Skipping...');
     try {
         serverQueue.connection.dispatcher.end();
     } catch (err) {
@@ -280,6 +281,7 @@ function stop(message, serverQueue) {
     if (!message.member.voice.channel) return message.channel.send('You have to be in a voice channel.');
     if (!serverQueue) return message.channel.send('No song to stop.');
 
+    message.channel.send('Stopping...');
     serverQueue.songs = [];
     try {
         serverQueue.connection.dispatcher.end();
