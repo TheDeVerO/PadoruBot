@@ -65,7 +65,7 @@ client.on('message', async message => {
         console.log('Leave command called')
         leave(message, serverQueue);
         return;
-    // Testing command with short track
+        // Testing command with short track
     } else if (message.content.startsWith(`${prefix}t`)) {
         console.log('Test command called')
         message.content = '>p https://www.youtube.com/watch?v=0JOKNcqK7X8'
@@ -139,7 +139,7 @@ async function execute(message, serverQueue) {
     if (args[1]) {
 
         // Checking if URL provided is YouTube video, if not - logging and sending info message in chat
-        if (args[1].startsWith('https://www.youtube.com/watch?')) {
+        if (args[1].startsWith('https://www.youtube.com/watch?') || args[1].startsWith('https://youtu.be/')) {
             // Trying to get song info from ytdl-core, if failing - logging and sending an info message in chat
             try {
                 const songInfo = await ytdl.getInfo(args[1]);
@@ -218,8 +218,14 @@ async function changeStatus(status) {
 
 // Function that ensures bot leaving voice channel, invokes stop() function to sieze queue and stop playing and then manually leaves
 function leave(message, serverQueue) {
-    stop(message, serverQueue);
-    serverQueue.voiceChannel.leave();
+    try {
+        stop(message, serverQueue);
+        serverQueue.songs = [];
+        queue.delete(message.guild.id);
+        serverQueue.voiceChannel.leave();
+    } catch (err) {
+        console.error(err);
+    }
 }
 
 // Main play function, receives guild to play at and song information
@@ -248,7 +254,7 @@ function play(guild, song) {
         .on('error', err => console.error(err));
 
     // Applying volume setting
-    dispatcher.setVolumeLogarithmic(serverQueue.volume / 5);
+    dispatcher.setVolumeLogarithmic(serverQueue.volume / 100);
     // Changing status while playing
     changeStatus('dnd');
 
@@ -262,7 +268,11 @@ function skip(message, serverQueue) {
     if (!message.member.voice.channel) return message.channel.send('You have to be in a voice channel.');
     if (!serverQueue) return message.channel.send('No song to skip.');
 
-    serverQueue.connection.dispatcher.end();
+    try {
+        serverQueue.connection.dispatcher.end();
+    } catch (err) {
+        console.error(err);
+    }
 }
 
 // Stop function, clears serverQueue.songs[] map and removes current playing song.
@@ -271,5 +281,9 @@ function stop(message, serverQueue) {
     if (!serverQueue) return message.channel.send('No song to stop.');
 
     serverQueue.songs = [];
-    serverQueue.connection.dispatcher.end();
+    try {
+        serverQueue.connection.dispatcher.end();
+    } catch (err) {
+        console.error(err);
+    }
 }
