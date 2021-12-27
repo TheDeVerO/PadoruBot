@@ -7,6 +7,7 @@ const {
 // We only need this core, if we want video to be played from YouTube. We can change to play audio from local storage, then we can simply remove this without an issue
 const ytdl = require('ytdl-core');
 
+// Variable for writing into JSON files, used in volumeChange();
 var fs = require('fs');
 
 // Initialising and logging as discord bot via token from ./config.json
@@ -45,61 +46,77 @@ client.on('message', async message => {
 
     // Block checking which command to execute
     if (message.content.startsWith(`${prefix}play`) || message.content.startsWith(`${prefix}p`)) {
-        console.log('Play command called, executing')
+        console.log('Play command called')
         execute(message, serverQueue);
         return
     } else if (message.content.startsWith(`${prefix}skip`)) {
-        skip(message, serverQueue);                                                                                 //TODO: add command logging in console
+        console.log('Skip command called')
+        skip(message, serverQueue);
         return;
     } else if (message.content.startsWith(`${prefix}stop`)) {
+        console.log('Stop command called')
         stop(message, serverQueue);
         return;
     } else if (message.content.startsWith(`${prefix}volume`) || message.content.startsWith(`${prefix}v`)) {
+        console.log('Volume command called')
         volumeChange(message);
         return;
     } else if (message.content.startsWith(`${prefix}dc`)) {
+        console.log('Leave command called')
         leave(message, serverQueue);
         return;
-    } else if (message.content.startsWith(`${prefix}t`)) {                                                          // Command for testing with short track
+    // Testing command with short track
+    } else if (message.content.startsWith(`${prefix}t`)) {
+        console.log('Test command called')
         message.content = '>p https://www.youtube.com/watch?v=0JOKNcqK7X8'
         execute(message, serverQueue);
         return;
     } else {
+        console.log('Invalid command detected, message: ' + message.content)
         message.channel.send('Invalid command');
     }
 });
 
+// Function for changing the volume modifier, rewrites bot-config.json, NOT APPENDS, MIGHT CAUSE TROUBLES IF THERE WOULD BE SOMETHING ELSE IN CONFIG.
 function volumeChange(message) {
     console.log('Current volume: ' + volume);
+
+    // Checking if there's any argument after volume command call, if not - returning current volume in message, as well as instruction
     if (!message.content.split(' ')[1]) {
         return message.channel.send(`Current volume: ${volume}\n To change volume - type \`${prefix}volume [percentage]\` or \`${prefix}v [percentage]\`.`);
+
+        // Checking if provided argument is a number, if not - returning info that value must be a number
     } else if (!isNaN(message.content.split(' ')[1])) {
+
+        // Parsing string with volume value and storing it in volume variable
         volume = parseInt(message.content.split(' ')[1]);
-        const config = {
-            "volume": volume
-        }
+        // Creating config constant to write in ./bot-config.json
+        const config = { "volume": volume };
+        // Applying JSON format to config object and storing it in json const
         const json = JSON.stringify(config);
+
+        // Writing json'ified config to bot-config.json and logging new volume
         fs.writeFile('./bot-config.json', json, 'utf8', () => {
             console.log('Volume has been changed, new volume: ' + volume);
+            return message.channel.send(`Changing volume... New volume: ${volume}`);
         });
-
     } else {
-        console.warn('Passed volume variable is not a number.')
-        return message.channel.send('Percentage value is must be a number.')
+        console.warn('Passed volume variable is not a number')
+        return message.channel.send('Percentage value must be a number.')
     }
 }
 
-// Constant for playlist 
+// Constant for playlist, will be filled later in execute() function.
 const queue = new Map();
 
 
 // Function for playing sequence
 async function execute(message, serverQueue) {
 
+    // Changing current status into Do Not Disturb mode, so you can always see if bot is busy or not
     changeStatus('dnd');
     // Splitting message string into args, [0] - prefix with command, [1] - url link to video
     const args = message.content.split(' ');
-
     // Song object, will store song title and url
     var song = {};
 
@@ -107,29 +124,41 @@ async function execute(message, serverQueue) {
     // Declaring voice channel object, and checking if user is in one, if not - returning info message
     const voiceChannel = message.member.voice.channel;
     if (!voiceChannel) {
-        console.warn('Unable to get voiceChannel object.');
-        return message.channel.send('You need to be in a voice channel.');
+        console.warn('Unable to get voiceChannel object');
+        return message.channel.send('You must be in a voice channel.');
     }
 
     // Checking if bot has required permissions, if not - returning info message
     const permissions = voiceChannel.permissionsFor(message.client.user);
     if (!permissions.has('CONNECT') || !permissions.has('SPEAK')) {
-        console.warn('Missing CONNECT or SPEAK permission.')
+        console.warn('Missing CONNECT or SPEAK permission');
         return message.channel.send('Missing permissions to join or speak.');
     }
 
-    // Check if music url provided, True - initializing song variable and storing there song data | False - playing padoru.
+    // Check if music url provided, True - initializing song variable and storing there song data | False - playing padoru
     if (args[1]) {
-        const songInfo = await ytdl.getInfo(args[1]);
-        //TODO: make sure that passed argument is actually a url and it's valid
-        // Since we accepting only YouTube links - should start with it domain.
-        song = {
-            title: songInfo.videoDetails.title,
-            url: songInfo.videoDetails.video_url,
+
+        // Checking if URL provided is YouTube video, if not - logging and sending info message in chat
+        if (args[1].startsWith('https://www.youtube.com/watch?')) {
+            // Trying to get song info from ytdl-core, if failing - logging and sending an info message in chat
+            try {
+                const songInfo = await ytdl.getInfo(args[1]);
+
+                // Filling song obj with songInfo details
+                song = { title: songInfo.videoDetails.title, url: songInfo.videoDetails.video_url, }
+                console.log('Received song ulr, initialised a song object');
+
+            } catch (err) {
+                console.error(err);
+                return message.channel.send('Error occured during video fetch, check the link, it\'s probably invalid');
+            }
+
+        } else {
+            console.log('Received argument is not a valid link: ' + message.content);
+            return message.channel.send('I can only play music from YouTube videos, no other sources or YouTube playlists are currently supported.');
         }
-        console.log('Received song ulr, initialised a song object.')
     } else {
-        console.log('No parameters given, playing padoru.');
+        console.log('No parameters given, playing padoru');
         song = { title: `PADORU PADORU`, url: `https://www.youtube.com/watch?v=dQ_d_VKrFgM` }
     }
 
@@ -147,8 +176,10 @@ async function execute(message, serverQueue) {
             volume: volume,
             playing: true
         }
-        // Adding contract to queue 
+
+        // Filling queue map with id of a guild we'll be connecting to and queueContract
         queue.set(message.guild.id, queueContract);
+
         // Pushing song object into songs array
         queueContract.songs.push(song);
         try {
@@ -158,11 +189,11 @@ async function execute(message, serverQueue) {
             console.log(`connected to ${voiceChannel.name}`);
             // Starting playing a song
             play(message.guild, queueContract.songs[0]);
-        } catch (e) {
+        } catch (err) {
             // If any error occurs during connection - printing it in both console and chat, so that bot won't crash
-            console.log(e);
+            console.error(err);
             queue.delete(message.guild.id);
-            return message.channel.send(e);
+            return message.channel.send(err);
         }
 
     } else {
@@ -172,8 +203,8 @@ async function execute(message, serverQueue) {
         // Indicating that bot is busy playing
         changeStatus('dnd');
         // If everything went right - informing user about successfull operation
-        console.log(`Added ${song.title} to queue.`);
-        return message.channel.send(`${song.title} has been added to the queue!`);
+        console.log(`Added ${song.title} to queue`);
+        return message.channel.send(`**${song.title}** has been added to the queue!`);
     }
 
 
@@ -184,52 +215,60 @@ async function changeStatus(status) {
     client.user.setPresence({ status: status, activity: { name: 'PADORU PADORU', type: 'PLAYING', url: 'https://www.youtube.com/watch?v=dQ_d_VKrFgM' } });
     console.log('Changed status to ' + status);
 }
-//TODO: add comments
 
+// Function that ensures bot leaving voice channel, invokes stop() function to sieze queue and stop playing and then manually leaves
 function leave(message, serverQueue) {
     stop(message, serverQueue);
     serverQueue.voiceChannel.leave();
 }
 
-
+// Main play function, receives guild to play at and song information
 function play(guild, song) {
     const serverQueue = queue.get(guild.id);
 
+    // If there's no song - changes status to online and leaves the channel, cleaning connection info in queue, 
     if (!song) {
+        console.log('No more songs, leaving the channel');
         changeStatus('online')
         serverQueue.voiceChannel.leave();
         queue.delete(guild.id);
         return;
     }
 
+    // Connection dispatcher, manages connection to Voice Channel
     const dispatcher = serverQueue.connection
         .play(ytdl(song.url))
         .on('finish', () => {
+            // Once bot finishes playing music - shifts playlist and plays next song
+            console.log('Finished playing');
             serverQueue.songs.shift();
             play(guild, serverQueue.songs[0]);
-            queue.delete(guild.id);
         })
+        // Logging errors if any occurs
         .on('error', err => console.error(err));
+
+    // Applying volume setting
     dispatcher.setVolumeLogarithmic(serverQueue.volume / 5);
+    // Changing status while playing
     changeStatus('dnd');
 
-    console.log(ytdl(song.url));
-
-    console.log(`Start playing: ${song.title} at ${guild.name}`);
-    serverQueue.textChannel.send(`Start playing: **${song.title}**`);
+    console.log(`Started playing: ${song.title} at ${guild.name}`);
+    serverQueue.textChannel.send(`Started playing: **${song.title}**`);
 
 }
 
+// Skip function, removes current playing song
 function skip(message, serverQueue) {
-    if (!message.member.voice.channel) return message.channel.send("You have to be in a voice channel.");
-    if (!serverQueue) return message.channel.send("No song to skip.");
+    if (!message.member.voice.channel) return message.channel.send('You have to be in a voice channel.');
+    if (!serverQueue) return message.channel.send('No song to skip.');
 
     serverQueue.connection.dispatcher.end();
 }
 
+// Stop function, clears serverQueue.songs[] map and removes current playing song.
 function stop(message, serverQueue) {
-    if (!message.member.voice.channel) return message.channel.send("You have to be in a voice channel.");
-    if (!serverQueue) return message.channel.send("There is no song that I could stop!");
+    if (!message.member.voice.channel) return message.channel.send('You have to be in a voice channel.');
+    if (!serverQueue) return message.channel.send('No song to stop.');
 
     serverQueue.songs = [];
     serverQueue.connection.dispatcher.end();
