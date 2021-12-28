@@ -6,7 +6,8 @@
     "ffmpeg-static": "^4.4.0",
     "fluent-ffmpeg": "^2.1.2",
     "yarn": "^1.22.17",
-    "ytdl-core": "^4.9.2"
+    "ytdl-core": "^4.9.2",
+    "ytpl": "^2.2.3"
   },
   "devDependencies": {
     "jest": "^27.4.5"
