@@ -21,6 +21,9 @@ console.log(config);
 var volume = config.volume;
 console.log('Initialized volume: ' + volume);
 
+// Variable to loop the song
+var loop = false;
+
 // Bunch of listeners for logging
 client.once('ready', () => {
     console.log('Ready');
@@ -59,12 +62,22 @@ client.on('message', async message => {
         return;
     } else if (message.content.startsWith(`${prefix}volume`) || message.content.startsWith(`${prefix}v`)) {
         console.log('Volume command called')
-        volumeChange(message);
+        volumeChange(message, serverQueue);
         return;
     } else if (message.content.startsWith(`${prefix}dc`)) {
         console.log('Leave command called')
         leave(message, serverQueue);
         return;
+        // Loop command, loops the current song
+    } else if (message.content.startsWith(`${prefix}loop`)) {
+        console.log('Loop command called');
+        loop = !loop;
+        console.log(`Loop: ${loop}`);
+        if (loop) {
+            return message.channel.send('Loop activated');
+        } else {
+            return message.channel.send('Loop deactivated');
+        }
         // Testing command with short track
     } else if (message.content.startsWith(`${prefix}t`)) {
         console.log('Test command called')
@@ -78,7 +91,7 @@ client.on('message', async message => {
 });
 
 // Function for changing the volume modifier, rewrites bot-config.json, NOT APPENDS, MIGHT CAUSE TROUBLES IF THERE WOULD BE SOMETHING ELSE IN CONFIG.
-function volumeChange(message) {
+function volumeChange(message, serverQueue) {
     console.log('Current volume: ' + volume);
 
     // Checking if there's any argument after volume command call, if not - returning current volume in message, as well as instruction
@@ -100,6 +113,16 @@ function volumeChange(message) {
             console.log('Volume has been changed, new volume: ' + volume);
             return message.channel.send(`Changing volume... New volume: ${volume}`);
         });
+
+        // Applying new volume setting
+        try {
+            // Applying volume to serverQueue object
+            serverQueue.volume = volume;
+            serverQueue.connection.dispatcher.setVolumeLogarithmic(volume / 100);
+        } catch (err) {
+            // Handle cases when volume changed while bot is not in voice channel.
+            console.error(err);
+        }
     } else {
         console.warn('Passed volume variable is not a number')
         return message.channel.send('Percentage value must be a number.')
@@ -244,11 +267,17 @@ function play(guild, song) {
     // Connection dispatcher, manages connection to Voice Channel
     const dispatcher = serverQueue.connection
         .play(ytdl(song.url))
+        // Once bot finishes playing music - shifts playlist and plays next song
         .on('finish', () => {
-            // Once bot finishes playing music - shifts playlist and plays next song
-            console.log('Finished playing');
-            serverQueue.songs.shift();
-            play(guild, serverQueue.songs[0]);
+            // While loop is true - playing the current song
+            if (loop) {
+                console.log('Loop activated, replaying...');
+                play(guild, serverQueue.songs[0]);
+            } else {
+                console.log('Finished playing');
+                serverQueue.songs.shift();
+                play(guild, serverQueue.songs[0]);
+            }
         })
         // Logging errors if any occurs
         .on('error', err => console.error(err));
