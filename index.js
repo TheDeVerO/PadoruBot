@@ -6,6 +6,8 @@ const {
 
 // We only need this core, if we want video to be played from YouTube. We can change to play audio from local storage, then we can simply remove this without an issue
 const ytdl = require('ytdl-core');
+// Youtube playlist core, will fetch videos array
+const ytpl = require('ytpl');
 
 // Variable for writing into JSON files, used in volumeChange();
 var fs = require('fs');
@@ -161,14 +163,14 @@ async function execute(message, serverQueue) {
     // Check if music url provided, True - initializing song variable and storing there song data | False - playing padoru
     if (args[1]) {
 
-        // Checking if URL provided is YouTube video, if not - logging and sending info message in chat
+        // If provided URL is YouTube video link 
         if (args[1].startsWith('https://www.youtube.com/watch?') || args[1].startsWith('https://youtu.be/')) {
             // Trying to get song info from ytdl-core, if failing - logging and sending an info message in chat
             try {
                 const songInfo = await ytdl.getInfo(args[1]);
 
                 // Filling song obj with songInfo details
-                song = { title: songInfo.videoDetails.title, url: songInfo.videoDetails.video_url, }
+                song = { title: songInfo.videoDetails.title, url: songInfo.videoDetails.video_url };
                 console.log('Received song ulr, initialised a song object');
 
             } catch (err) {
@@ -176,9 +178,25 @@ async function execute(message, serverQueue) {
                 return message.channel.send('Error occured during video fetch, check the link, it\'s probably invalid');
             }
 
+            // If provided URL is a Youtube playlist link
+        } else if (args[1].startsWith('https://www.youtube.com/playlist?')) {
+            // Trying to get playlist from ytpl, if failing - logging and sending an info message in chat
+            try {
+                var playlist = await ytpl(args[1], { limit: 40 });  // Songs count is limited to 40 per playlist, change to variable if implement settings
+
+                // Filling song obj
+                song = { title: playlist.items[0].title, url: playlist.items[0].shortUrl };
+                // Removing first entry in playlist.items, we just filled dedicated song object with its details
+                playlist.items.shift();
+                // Boolean for toggling loop, filling the queue with songs from playlist
+                var isPlaylist = true;
+            } catch (err) {
+                console.error(err);
+                return message.channel.send('Error occured during playlist fetch, check the link, it\'s probably invalid');
+            }
         } else {
             console.log('Received argument is not a valid link: ' + message.content);
-            return message.channel.send('I can only play music from YouTube videos, no other sources or YouTube playlists are currently supported.');
+            return message.channel.send('I can only play music from YouTube, no other sources are currently supported.');
         }
     } else {
         console.log('No parameters given, playing padoru');
@@ -205,6 +223,15 @@ async function execute(message, serverQueue) {
 
         // Pushing song object into songs array
         queueContract.songs.push(song);
+
+        // Pushing all objects from playlist to songs array
+        if (isPlaylist) {
+            playlist.items.forEach(obj => {
+                let song = { title: obj.title, url: obj.shortUrl };
+                queueContract.songs.push(song);
+            });
+            isPlaylist = false;
+        }
         try {
             // Connecting to voicechat and assigning connection as an object
             var connection = await voiceChannel.join();
@@ -222,6 +249,15 @@ async function execute(message, serverQueue) {
     } else {
         // Pushing song request at the end of queue and logging it in console
         serverQueue.songs.push(song);
+        
+        // Pushing all objects from playlist to songs array
+        if (isPlaylist) {
+            playlist.items.forEach(obj => {
+                let song = { title: obj.title, url: obj.shortUrl };
+                queueContract.songs.push(song);
+            });
+            isPlaylist = false;
+        }
         console.log(serverQueue.songs);
         // Indicating that bot is busy playing
         changeStatus('dnd');
@@ -246,6 +282,7 @@ function leave(message, serverQueue) {
         serverQueue.songs = [];
         queue.delete(message.guild.id);
         serverQueue.voiceChannel.leave();
+        changeStatus('online');
     } catch (err) {
         console.error(err);
     }
